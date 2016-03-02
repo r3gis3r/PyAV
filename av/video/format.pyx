@@ -58,6 +58,9 @@ cdef class VideoFormat(object):
         else:
             return '<av.%s %s>' % (self.__class__.__name__, self.name)
 
+    def __int__(self):
+        return int(self.pix_fmt)
+    
     property name:
         """Canonical name of the pixel format."""
         def __get__(self):
@@ -130,7 +133,7 @@ cdef class VideoFormatComponent(object):
     property is_alpha:
         """Is this component an alpha channel?"""
         def __get__(self):
-            return ((self.index == 1 and self.format.ptr.nb_components == 2) or 
+            return ((self.index == 1 and self.format.ptr.nb_components == 2) or
                     (self.index == 3 and self.format.ptr.nb_components == 4))
 
     property is_luma:
