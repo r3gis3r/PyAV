@@ -5,6 +5,7 @@ from cpython cimport PyWeakref_NewRef
 cimport libav as lib
 
 from av.audio.stream cimport AudioStream
+from av.dictionary import Dictionary
 from av.packet cimport Packet
 from av.subtitles.stream cimport SubtitleStream
 from av.utils cimport err_check, avdict_to_dict, avrational_to_faction, to_avrational, media_type_to_string
@@ -14,7 +15,7 @@ from av.video.stream cimport VideoStream
 cdef object _cinit_bypass_sentinel = object()
 
 
-cdef Stream build_stream(Container container, lib.AVStream *c_stream):
+cdef Stream build_stream(Container container, lib.AVStream *c_stream, dict options):
     """Build an av.Stream for an existing AVStream.
 
     The AVStream MUST be fully constructed and ready for use before this is
@@ -36,7 +37,7 @@ cdef Stream build_stream(Container container, lib.AVStream *c_stream):
     else:
         py_stream = Stream.__new__(Stream, _cinit_bypass_sentinel)
 
-    py_stream._init(container, c_stream)
+    py_stream._init(container, c_stream, options)
     return py_stream
 
 
@@ -47,7 +48,7 @@ cdef class Stream(object):
             return
         raise RuntimeError('cannot manually instatiate Stream')
 
-    cdef _init(self, Container container, lib.AVStream *stream):
+    cdef _init(self, Container container, lib.AVStream *stream, dict options):
         
         self._container = container.proxy        
         self._weak_container = PyWeakref_NewRef(container, None)
@@ -55,6 +56,7 @@ cdef class Stream(object):
         self._codec_context = stream.codec
         
         self.metadata = avdict_to_dict(stream.metadata)
+        self.options = Dictionary(**(options or {}))
         
         # This is an input container!
         if self._container.ptr.iformat:

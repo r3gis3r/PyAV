@@ -34,7 +34,7 @@ cdef class InputContainer(Container):
         self.streams = StreamContainer()
         cdef int i
         for i in range(self.proxy.ptr.nb_streams):
-            self.streams.add_stream(build_stream(self, self.proxy.ptr.streams[i]))
+            self.streams.add_stream(build_stream(self, self.proxy.ptr.streams[i], {}))
 
         self.metadata = avdict_to_dict(self.proxy.ptr.metadata)
 

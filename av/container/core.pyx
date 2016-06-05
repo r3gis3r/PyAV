@@ -269,7 +269,7 @@ def open(file, mode=None, format=None, options=None):
     :param str file: The file to open.
     :param str mode: ``"r"`` for reading and ``"w"`` for writing.
     :param str format: Specific format to use. Defaults to autodect.
-    :param dict options: Options to pass to the container and streams.
+    :param dict options: Options to pass to the container.
 
     For devices (via `libavdevice`), pass the name of the device to ``format``,
     e.g.::

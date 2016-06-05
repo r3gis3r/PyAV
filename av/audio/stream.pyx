@@ -9,8 +9,8 @@ from av.utils cimport err_check
 
 cdef class AudioStream(Stream):
 
-    cdef _init(self, Container container, lib.AVStream *stream):
-        Stream._init(self, container, stream)
+    cdef _init(self, Container container, lib.AVStream *stream, dict options):
+        Stream._init(self, container, stream, options)
         
         # Sometimes there isn't a layout set, but there are a number of
         # channels. Assume it is the default layout.

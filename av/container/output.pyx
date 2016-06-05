@@ -16,8 +16,8 @@ cdef class OutputContainer(Container):
     def __del__(self):
         self.close()
 
-    cpdef add_stream(self, codec_name=None, object rate=None, Stream template=None):
-        """add_stream(codec_name, rate=None)
+    cpdef add_stream(self, codec_name=None, object rate=None, Stream template=None, dict options=None):
+        """add_stream(codec_name, rate=None, options=None)
 
         Create a new stream, and return it.
 
@@ -26,6 +26,7 @@ cdef class OutputContainer(Container):
             Examples for video include ``24``, ``23.976``, and
             ``Fraction(30000,1001)``. Examples for audio include ``48000``
             and ``44100``.
+        :param options: Options to pass to the stream codec.
         :returns: The new :class:`~av.stream.Stream`.
 
         """
@@ -133,13 +134,13 @@ cdef class OutputContainer(Container):
             codec_context.flags |= lib.CODEC_FLAG_GLOBAL_HEADER
         
         # Finally construct the user-land stream.
-        cdef Stream py_stream = build_stream(self, stream)
+        cdef Stream py_stream = build_stream(self, stream, options)
         self.streams.add_stream(py_stream)
         return py_stream
     
     cpdef start_encoding(self):
         """Write the file header! Called automatically."""
-        
+
         if self._started:
             return
 
@@ -148,13 +149,10 @@ cdef class OutputContainer(Container):
         cdef _Dictionary options
         for stream in self.streams:
             if not lib.avcodec_is_open(stream._codec_context):
-                options = self.options.copy()
+                options = stream.options.copy()
                 self.proxy.err_check(lib.avcodec_open2(
                     stream._codec_context,
                     stream._codec,
-                    # Our understanding is that there is little overlap bettween
-                    # options for containers and streams, so we use the same dict.
-                    # Possible TODO: expose per-stream options.
                     &options.ptr
                 ))
             dict_to_avdict(&stream._stream.metadata, stream.metadata, clear=True)

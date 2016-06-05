@@ -11,8 +11,8 @@ from av.video.frame cimport alloc_video_frame
 
 cdef class VideoStream(Stream):
     
-    cdef _init(self, Container container, lib.AVStream *stream):
-        Stream._init(self, container, stream)
+    cdef _init(self, Container container, lib.AVStream *stream, dict options):
+        Stream._init(self, container, stream, options)
         self.last_w = 0
         self.last_h = 0
         self.encoded_frame_count = 0
