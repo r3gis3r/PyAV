@@ -206,6 +206,7 @@ cdef void log_callback(void *ptr, int level, const char *format, lib.va_list arg
     # Get the name.
     cdef lib.AVClass *cls = (<lib.AVClass**>ptr)[0] if ptr else NULL
     cdef char *item_name = NULL;
+    record.name = NULL
     if cls and cls.item_name:
         # I'm not 100% on this, but this should be static, and so
         # it doesn't matter if the AVClass that returned it vanishes or not.
