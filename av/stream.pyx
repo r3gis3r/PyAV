@@ -50,7 +50,7 @@ cdef class Stream(object):
 
     cdef _init(self, Container container, lib.AVStream *stream, dict options):
         
-        self._container = container.proxy        
+        self._container = container.proxy
         self._weak_container = PyWeakref_NewRef(container, None)
         self._stream = stream
         self._codec_context = stream.codec
@@ -121,7 +121,7 @@ cdef class Stream(object):
         def __get__(self): return avrational_to_faction(&self._stream.time_base)
 
     property rate:
-        def __get__(self): 
+        def __get__(self):
             if self._codec_context:
                 return self._codec_context.ticks_per_frame * avrational_to_faction(&self._codec_context.time_base)
     
@@ -245,7 +245,7 @@ cdef class Stream(object):
         # is the way to go. The PTS from a packet is the correct one while
         # decoding, and it is copied to pkt_pts during creation of a frame.
         frame.ptr.pts = frame.ptr.pkt_pts
-        frame.time_base = self._stream.time_base
+        frame._time_base = self._stream.time_base
         frame.index = self._codec_context.frame_number - 1
 
     cdef _decode_one(self, lib.AVPacket *packet, int *data_consumed):
