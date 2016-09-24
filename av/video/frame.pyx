@@ -298,7 +298,7 @@ cdef class VideoFrame(Frame):
         assert array.dtype == 'uint8'
 
         frame = VideoFrame(array.shape[1], array.shape[0], format)
-        frame.planes[0].update(array)
+        frame.planes[0].update(array.reshape(-1))
 
         return frame
 

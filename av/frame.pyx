@@ -92,7 +92,33 @@ cdef class Frame(object):
             self.ptr.pkt_pts = other.ptr.pkt_pts
             self.ptr.pkt_dts = other.ptr.pkt_dts
             self.ptr.pts = other.ptr.pts
-    
+
+    def get_attributes(self):
+        attributes = {
+            "index": self.index,
+            "time_base": self.time_base,
+        }
+        if self.ptr:
+            attributes.update({
+                "pkt_pts": self.ptr.pkt_pts,
+                "pkt_dts": self.ptr.pkt_dts,
+                "pts": self.ptr.pts
+            })
+        return attributes
+
+    def set_attributes(self, attributes):
+        if "index" in attributes:
+            self.index = attributes["index"]
+        if "time_base" in attributes:
+            self.time_base = attributes["time_base"]
+        if self.ptr:
+            if "pkt_pts" in attributes:
+                self.ptr.pkt_pts = attributes["pkt_pts"]
+            if "pkt_dts" in attributes:
+                self.ptr.pkt_dts = attributes["pkt_dts"]
+            if "pts" in attributes:
+                self.ptr.pts = attributes["pts"]
+
     cdef _init_properties(self):
         pass # Dummy to match the API of the others.
 
