@@ -166,9 +166,9 @@ cdef class AudioFrame(Frame):
 
     def get_attributes(self):
         attributes = Frame.get_attributes(self)
-        attributes = {
+        attributes.update({
             "rate": self.rate,
-        }
+        })
         return attributes
 
     def set_attributes(self, attributes):
