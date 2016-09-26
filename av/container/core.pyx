@@ -14,6 +14,8 @@ from av.utils cimport err_check, stash_exception, dict_to_avdict
 from av.dictionary import Dictionary # not cimport
 from av.utils import AVError # not cimport
 
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
+
 
 cdef int pyio_read(void *opaque, uint8_t *buf, int buf_size) nogil:
     with gil:
@@ -143,7 +145,8 @@ cdef class ContainerProxy(object):
 
             # This is effectively the maximum size of reads.
             self.bufsize = 32 * 1024
-            self.buffer = <unsigned char*>lib.av_malloc(self.bufsize)
+            # self.buffer = <unsigned char*>lib.av_malloc(self.bufsize)
+            self.buffer = <unsigned char*>PyMem_Malloc(self.bufsize)
 
             self.iocontext = lib.avio_alloc_context(
                 self.buffer, self.bufsize,
@@ -185,9 +188,11 @@ cdef class ContainerProxy(object):
             # Manually free things.
             else:
                 if self.buffer:
-                    lib.av_freep(&self.buffer)
-                if self.iocontext:
-                    lib.av_freep(&self.iocontext)
+                    # lib.av_freep(&self.buffer)
+                    with gil: PyMem_Free(self.buffer)
+                    self.buffer = NULL
+                # if self.iocontext:
+                #     lib.av_freep(&self.iocontext)
 
     cdef seek(self, int stream_index, lib.int64_t timestamp, str mode, bint backward, bint any_frame):
 

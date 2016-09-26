@@ -2,7 +2,7 @@ from av.audio.format cimport get_audio_format
 from av.audio.layout cimport get_audio_layout
 from av.audio.plane cimport AudioPlane
 from av.utils cimport err_check
-
+from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 AV_TO_NUMPY_TYPE = {
     "u8": "uint",
@@ -19,7 +19,13 @@ AV_TO_NUMPY_TYPE = {
 
 NUMPY_TO_AV_TYPE = {
     # We relayout in non planar type
-    numpy_t: av_t for av_t, numpy_t in AV_TO_NUMPY_TYPE.iteritems() if not av_t.endswith("p")
+    # numpy_t: av_t for av_t, numpy_t in AV_TO_NUMPY_TYPE.iteritems() if not av_t.endswith("p")
+    # More efficient but less future prone - we should find a way to use enum values from C
+    "uint": 0, # lib.AVSampleFormat.AV_SAMPLE_FMT_U8,
+    "int16": 1, # lib.AVSampleFormat.AV_SAMPLE_FMT_S16,
+    "int32": 2, # lib.AVSampleFormat.AV_SAMPLE_FMT_S32,
+    "float32": 3, # lib.AVSampleFormat.AV_SAMPLE_FMT_FLT,
+    "float64": 4 #lib.AVSampleFormat.AV_SAMPLE_FMT_DBL
 }
 
 cdef object _cinit_bypass_sentinel
@@ -56,7 +62,10 @@ cdef class AudioFrame(Frame):
         if self.layout.channels and nb_samples:
             
             # Cleanup the old buffer.
-            lib.av_freep(&self._buffer)
+            # lib.av_freep(&self._buffer)
+            if self._buffer:
+                PyMem_Free(self._buffer)
+                self._buffer = NULL
 
             # Get a new one.
             self._buffer_size = err_check(lib.av_samples_get_buffer_size(
@@ -66,7 +75,8 @@ cdef class AudioFrame(Frame):
                 format,
                 align
             ))
-            self._buffer = <uint8_t *>lib.av_malloc(self._buffer_size)
+            # self._buffer = <uint8_t *>lib.av_malloc(self._buffer_size)
+            self._buffer = <uint8_t *>PyMem_Malloc(self._buffer_size)
             if not self._buffer:
                 raise MemoryError("cannot allocate AudioFrame buffer")
 
@@ -79,7 +89,6 @@ cdef class AudioFrame(Frame):
                 self._buffer_size,
                 self.align
             ))
-            
             self._init_planes(AudioPlane)
 
     cdef _recalc_linesize(self):
@@ -102,8 +111,10 @@ cdef class AudioFrame(Frame):
         self._init_planes(AudioPlane)
 
     def __dealloc__(self):
-        lib.av_freep(&self._buffer)
-    
+        # lib.av_freep(&self._buffer)
+        PyMem_Free(self._buffer)
+        self._buffer = NULL
+
     def __repr__(self):
         return '<av.%s %d, %d samples at %dHz, %s, %s at 0x%x>' % (
             self.__class__.__name__,
@@ -149,15 +160,17 @@ cdef class AudioFrame(Frame):
     @staticmethod
     def from_ndarray(array):
         cdef AudioFrame frame = alloc_audio_frame()
-        import numpy as np
 
         # Raise a KeyError if not good
-        format = lib.av_get_sample_fmt(NUMPY_TO_AV_TYPE[array.dtype.name])
+        # cdef lib.AVSampleFormat format = lib.av_get_sample_fmt(NUMPY_TO_AV_TYPE[array.dtype.name])
+        cdef lib.AVSampleFormat format = <lib.AVSampleFormat>NUMPY_TO_AV_TYPE[array.dtype.name]
+        cdef int samples = array.shape[0]
+        cdef int channels = array.shape[1]
 
         frame._init(
             format,
-            lib.av_get_default_channel_layout(array.shape[1]),
-            array.shape[0],
+            lib.av_get_default_channel_layout(channels),
+            samples,
             1, # Align?
         )
         frame.planes[0].update(array.reshape(-1))
