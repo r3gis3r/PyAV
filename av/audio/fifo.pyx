@@ -26,6 +26,8 @@ cdef class AudioFifo:
         self.pts_offset = 0
         self.time_base.num = 1
         self.time_base.den = 1
+        self.source_time_base.num = 1
+        self.source_time_base.den = 1
         
     cpdef write(self, AudioFrame frame):
         """Push some samples into the queue."""
@@ -36,6 +38,8 @@ cdef class AudioFifo:
             self.format = get_audio_format(<lib.AVSampleFormat>frame.ptr.format)
             self.layout = get_audio_layout(0, frame.ptr.channel_layout)
             self.time_base.den = frame.ptr.sample_rate
+            self.source_time_base.num = frame.time_base.numerator
+            self.source_time_base.den = frame.time_base.denominator
             self.ptr = lib.av_audio_fifo_alloc(
                 self.format.sample_fmt,
                 len(self.layout.channels),
@@ -107,7 +111,7 @@ cdef class AudioFifo:
         frame.ptr.channel_layout = self.layout.layout
         
         if self.last_pts != lib.AV_NOPTS_VALUE:
-            frame.ptr.pts = self.last_pts - self.pts_offset
+            frame.ptr.pts = self.last_pts - lib.av_rescale_q(self.pts_offset, self.time_base, self.source_time_base)
             self.pts_offset -= nb_samples
         
         return frame

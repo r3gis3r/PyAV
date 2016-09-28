@@ -17,7 +17,8 @@ cdef class AudioFifo:
     cdef int64_t last_pts
     cdef int64_t pts_offset
     cdef lib.AVRational time_base
-    
+    cdef lib.AVRational source_time_base
+
     cpdef write(self, AudioFrame frame)
     cpdef read(self, unsigned int nb_samples=*, bint partial=*)
     

@@ -191,6 +191,8 @@ cdef class ContainerProxy(object):
                     # lib.av_freep(&self.buffer)
                     with gil: PyMem_Free(self.buffer)
                     self.buffer = NULL
+                # As we allocate 32 * 1024 the following post indicates we should not free (to avoid double free)
+                # https://ffmpeg.org/pipermail/libav-user/2013-April/004162.html
                 # if self.iocontext:
                 #     lib.av_freep(&self.iocontext)
 
