@@ -2,7 +2,6 @@ from av.audio.format cimport get_audio_format
 from av.audio.layout cimport get_audio_layout
 from av.audio.plane cimport AudioPlane
 from av.utils cimport err_check
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 AV_TO_NUMPY_TYPE = {
     "u8": "uint",
@@ -62,10 +61,10 @@ cdef class AudioFrame(Frame):
         if self.layout.channels and nb_samples:
             
             # Cleanup the old buffer.
-            # lib.av_freep(&self._buffer)
-            if self._buffer:
-                PyMem_Free(self._buffer)
-                self._buffer = NULL
+            lib.av_freep(&self._buffer)
+            # if self._buffer:
+            #     PyMem_Free(self._buffer)
+            #     self._buffer = NULL
 
             # Get a new one.
             self._buffer_size = err_check(lib.av_samples_get_buffer_size(
@@ -75,8 +74,7 @@ cdef class AudioFrame(Frame):
                 format,
                 align
             ))
-            # self._buffer = <uint8_t *>lib.av_malloc(self._buffer_size)
-            self._buffer = <uint8_t *>PyMem_Malloc(self._buffer_size)
+            self._buffer = <uint8_t *>lib.av_malloc(self._buffer_size)
             if not self._buffer:
                 raise MemoryError("cannot allocate AudioFrame buffer")
 
@@ -111,9 +109,7 @@ cdef class AudioFrame(Frame):
         self._init_planes(AudioPlane)
 
     def __dealloc__(self):
-        # lib.av_freep(&self._buffer)
-        PyMem_Free(self._buffer)
-        self._buffer = NULL
+        lib.av_freep(&self._buffer)
 
     def __repr__(self):
         return '<av.%s %d, %d samples at %dHz, %s, %s at 0x%x>' % (

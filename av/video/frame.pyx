@@ -2,7 +2,6 @@ from av.bytesource cimport ByteSource, bytesource
 from av.utils cimport err_check
 from av.video.format cimport get_video_format, VideoFormat
 from av.video.plane cimport VideoPlane
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 
 cdef object _cinit_bypass_sentinel
@@ -47,16 +46,13 @@ cdef class VideoFrame(Frame):
             if width and height:
 
                 # Cleanup the old buffer.
-                # lib.av_freep(&self._buffer)
-                with gil: PyMem_Free(self._buffer)
-                self._buffer = NULL
+                lib.av_freep(&self._buffer)
 
                 # Get a new one.
                 buffer_size = lib.avpicture_get_size(format, width, height)
                 with gil: err_check(buffer_size)
 
-                # self._buffer = <uint8_t *>lib.av_malloc(buffer_size)
-                with gil: self._buffer = <uint8_t *>PyMem_Malloc(buffer_size)
+                self._buffer = <uint8_t *>lib.av_malloc(buffer_size)
 
                 if not self._buffer:
                     with gil: raise MemoryError("cannot allocate VideoFrame buffer")
@@ -80,8 +76,7 @@ cdef class VideoFrame(Frame):
         self._init_planes(VideoPlane)
 
     def __dealloc__(self):
-        # lib.av_freep(&self._buffer)
-        PyMem_Free(self._buffer)
+        lib.av_freep(&self._buffer)
         self._buffer = NULL
 
     def __repr__(self):
