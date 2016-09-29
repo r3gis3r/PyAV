@@ -12,8 +12,14 @@ from av.utils import AVError # not cimport
 cdef class InputContainer(Container):
 
     def __cinit__(self, *args, **kwargs):
-
-        cdef _Dictionary options = self.options.copy()
+        cdef int i
+        # Options dictionary, must be a list of size equal to nb_streams
+        cdef lib.AVDictionary** streams_options = <lib.AVDictionary**> lib.av_malloc(self.proxy.ptr.nb_streams * sizeof(lib.AVDictionary*))
+        # Our understanding is that there is little overlap bettween
+        # options for containers and each streams, so we use the same dict.
+        for i in range(self.proxy.ptr.nb_streams):
+            streams_options[i] = NULL
+            lib.av_dict_copy(&streams_options[i], self.options.ptr, 0)
         with nogil:
             # This peeks are the first few frames to:
             #   - set stream.disposition from codec.audio_service_type (not exposed);
@@ -24,17 +30,16 @@ cdef class InputContainer(Container):
             #   - open and closes codecs with the options provided.
             ret = lib.avformat_find_stream_info(
                 self.proxy.ptr,
-                # Our understanding is that there is little overlap bettween
-                # options for containers and streams, so we use the same dict.
-                # FIXME: This expects per-stream options.
-                &options.ptr
+                streams_options
             )
         self.proxy.err_check(ret)
 
         self.streams = StreamContainer()
-        cdef int i
         for i in range(self.proxy.ptr.nb_streams):
             self.streams.add_stream(build_stream(self, self.proxy.ptr.streams[i], {}))
+            # Clear options as not necessary anymore
+            if streams_options[i] != NULL:
+                lib.av_dict_free(&streams_options[i])
 
         self.metadata = avdict_to_dict(self.proxy.ptr.metadata)
 
