@@ -2,7 +2,12 @@ from av.bytesource cimport ByteSource, bytesource
 from av.utils cimport err_check
 from av.video.format cimport get_video_format, VideoFormat
 from av.video.plane cimport VideoPlane
+cimport numpy as np
+import numpy as np
+cimport cython
 
+
+cdef int YUV420P_ALIGN = 64
 
 cdef object _cinit_bypass_sentinel
 
@@ -37,6 +42,7 @@ cdef class VideoFrame(Frame):
 
     cdef _init(self, lib.AVPixelFormat format, unsigned int width, unsigned int height):
         cdef int buffer_size
+        cdef int align = 1
         with nogil:
             self.ptr.width = width
             self.ptr.height = height
@@ -47,23 +53,34 @@ cdef class VideoFrame(Frame):
 
                 # Cleanup the old buffer.
                 lib.av_freep(&self._buffer)
-
+                if format == lib.AV_PIX_FMT_YUV420P:
+                    align = YUV420P_ALIGN
                 # Get a new one.
-                buffer_size = lib.avpicture_get_size(format, width, height)
+                buffer_size = lib.av_image_get_buffer_size(format, width, height, align)
+                # buffer_size = lib.avpicture_get_size(format, width, height)
                 with gil: err_check(buffer_size)
 
                 self._buffer = <uint8_t *>lib.av_malloc(buffer_size)
 
                 if not self._buffer:
                     with gil: raise MemoryError("cannot allocate VideoFrame buffer")
-
                 # Attach the AVPicture to our buffer.
-                lib.avpicture_fill(
-                        <lib.AVPicture *>self.ptr,
-                        self._buffer,
-                        format,
-                        width,
-                        height
+                # TODO : condition ffmpeg available version
+                # lib.avpicture_fill(
+                #         <lib.AVPicture *>self.ptr,
+                #         self._buffer,
+                #         format,
+                #         width,
+                #         height
+                # )
+                lib.av_image_fill_arrays(
+                    self.ptr.data,
+                    self.ptr.linesize,
+                    self._buffer,
+                    format,
+                    width,
+                    height,
+                    align
                 )
 
         self._init_properties()
@@ -77,7 +94,6 @@ cdef class VideoFrame(Frame):
 
     def __dealloc__(self):
         lib.av_freep(&self._buffer)
-        self._buffer = NULL
 
     def __repr__(self):
         return '<av.%s #%d, %s %dx%d at 0x%x>' % (
@@ -238,25 +254,39 @@ cdef class VideoFrame(Frame):
         from PIL import Image
         return Image.frombuffer("RGB", (self.width, self.height), self.reformat(format="rgb24", **kwargs).planes[0], "raw", "RGB", 0, 1)
 
+    @cython.boundscheck(False)
     def to_nd_array(self, **kwargs):
         """Get a numpy array of this frame.
 
         Any ``**kwargs`` are passed to :meth:`VideoFrame.reformat`.
 
         """
-
+        cdef np.ndarray[np.uint8_t, ndim=1] out_np_array
+        cdef int yuv_plane_size
         cdef VideoFrame frame = self.reformat(**kwargs)
+        # TODO: Make this more general (if we can)
+        if frame.ptr.format in (lib.AV_PIX_FMT_YUV420P,):
+            # Pseudo flat format for yuv, useful for serialization/deserialization made faster
+            yuv_plane_size = frame.ptr.linesize[0] * frame.ptr.height
+            buffer_size = yuv_plane_size * 3 / 2
+            out_np_array = np.empty((buffer_size,), dtype=np.uint8)
+            # out_np_array[:yuv_plane_size] = np.frombuffer(frame.planes[0], np.uint8)
+            planes = frame.planes
+            out_np_array[:yuv_plane_size] = planes[0] # np.frombuffer(frame.planes[0], np.uint8)
+            out_np_array[yuv_plane_size:yuv_plane_size*5/4] = planes[1] # np.frombuffer(frame.planes[1], np.uint8)
+            out_np_array[yuv_plane_size*5/4:yuv_plane_size*3/2] = planes[2] # np.frombuffer(frame.planes[2], np.uint8)
+            return out_np_array
+
         if len(frame.planes) != 1:
             raise ValueError('Cannot conveniently get numpy array from multiplane frame')
 
-        import numpy as np
-
         # We only suppose this convenience for a few types.
-        # TODO: Make this more general (if we can)
-        if frame.format.name in ('rgb24', 'bgr24'):
-            return np.frombuffer(frame.planes[0], np.uint8).reshape(frame.height, frame.width, -1)
-        if frame.format.name == ('gray16le', 'gray16be'):
+        if frame.ptr.format in (lib.AV_PIX_FMT_RGB24, lib.AV_PIX_FMT_BGR24):
+            return np.frombuffer(frame.planes[0], np.uint8).reshape(frame.ptr.height, frame.ptr.width, -1)
+        # TODO : express this a more performant way
+        if frame.format.name in ('gray16le', 'gray16be'):
             return np.frombuffer(frame.planes[0], np.dtype('<u2')).reshape(frame.height, frame.width)
+
         else:
             raise ValueError("Cannot conveniently get numpy array from %s format" % frame.format.name)
 
@@ -291,23 +321,38 @@ cdef class VideoFrame(Frame):
         return frame
 
     @staticmethod
-    def from_ndarray(array, format='rgb24'):
+    def from_ndarray(array, format='rgb24', width=None, height=None, **kwargs):
 
         # TODO: We could stand to be more accepting.
-        assert array.ndim == 3
-        assert array.shape[2] == 3
         assert array.dtype == 'uint8'
 
-        frame = VideoFrame(array.shape[1], array.shape[0], format)
-        frame.planes[0].update(array.reshape(-1))
+        cdef int yuv420_size
 
+        if format in ('rgb24', 'bgr24', 'gray16le', 'gray16be'):
+            assert array.ndim == 3
+            assert array.shape[2] == 3
+            frame = VideoFrame(array.shape[1], array.shape[0], format)
+            frame.planes[0].update(array.reshape(-1))
+        elif format in ('yuv420p',):
+            frame = VideoFrame(width, height, format)
+            yuv_plane_size = frame.ptr.linesize[0]*frame.ptr.height
+            frame.planes[0].update(array[:yuv_plane_size])
+            frame.planes[1].update(array[yuv_plane_size:yuv_plane_size*5/4])
+            frame.planes[2].update(array[yuv_plane_size*5/4:yuv_plane_size*3/2])
+        else:
+            raise ValueError("Cannot conveniently get from numpy array with %s format" % format)
+        if kwargs:
+            frame.set_attributes(kwargs)
         return frame
 
     def get_attributes(self):
         attributes = Frame.get_attributes(self)
-        attributes.update({
-            "key_frame": self.key_frame,
-        })
+        if self.ptr:
+            attributes.update({
+                "key_frame": self.ptr.key_frame,
+                "width": self.ptr.width,
+                "height": self.ptr.height,
+            })
         return attributes
 
     def set_attributes(self, attributes):

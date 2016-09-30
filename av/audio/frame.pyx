@@ -154,7 +154,7 @@ cdef class AudioFrame(Frame):
         
 
     @staticmethod
-    def from_ndarray(array):
+    def from_ndarray(array, **kwargs):
         cdef AudioFrame frame = alloc_audio_frame()
 
         # Raise a KeyError if not good
@@ -170,6 +170,8 @@ cdef class AudioFrame(Frame):
             1, # Align?
         )
         frame.planes[0].update(array.reshape(-1))
+        if kwargs:
+            frame.set_attributes(kwargs)
 
         return frame
 

@@ -60,12 +60,6 @@ cdef class VideoStream(Stream):
             self.last_w = self._codec_context.width
             self.last_h = self._codec_context.height
             
-            self.buffer_size = lib.avpicture_get_size(
-                self._codec_context.pix_fmt,
-                self._codec_context.width,
-                self._codec_context.height,
-            )
-            
             # Create a new SwsContextProxy
             self.reformatter = VideoReformatter()
 

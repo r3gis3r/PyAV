@@ -202,6 +202,7 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
         int channel_layout # Audio channel_layout
         int format # Should be AVPixelFormat or AV...Format
         int key_frame # 0 or 1.
+        int interlaced_frame # 	The content of the picture is interlaced.
         
         int64_t pts
         int64_t pkt_pts
@@ -234,7 +235,24 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
         int width,
         int height
     )
-    
+
+    # TODO : condition to available ffmpeg version
+    cdef int av_image_fill_arrays(
+        uint8_t **dst_data,
+        int *dst_linesize,
+        const uint8_t *src,
+        AVPixelFormat pix_fmt,
+        int width,
+        int height,
+        int align
+    )
+    cdef int av_image_get_buffer_size(
+        AVPixelFormat pix_fmt,
+        int    width,
+        int    height,
+        int    align
+    )
+
     cdef struct AVPacket:
 
         int64_t pts

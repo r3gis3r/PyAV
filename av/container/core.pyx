@@ -14,8 +14,6 @@ from av.utils cimport err_check, stash_exception, dict_to_avdict
 from av.dictionary import Dictionary # not cimport
 from av.utils import AVError # not cimport
 
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
-
 
 cdef int pyio_read(void *opaque, uint8_t *buf, int buf_size) nogil:
     with gil:
@@ -188,8 +186,6 @@ cdef class ContainerProxy(object):
             else:
                 if self.buffer:
                     lib.av_freep(&self.buffer)
-                    # with gil: PyMem_Free(self.buffer)
-                    # self.buffer = NULL
                 # As we allocate 32 * 1024 the following post indicates we should not free (to avoid double free)
                 # https://ffmpeg.org/pipermail/libav-user/2013-April/004162.html
                 # if self.iocontext:

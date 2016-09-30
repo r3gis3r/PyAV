@@ -17,6 +17,7 @@ cdef extern from "libavutil/avutil.pyav.h" nogil:
         AV_PIX_FMT_NONE
         AV_PIX_FMT_YUV420P
         AV_PIX_FMT_RGB24
+        AV_PIX_FMT_BGR24
         PIX_FMT_RGB24
         PIX_FMT_RGBA
 
