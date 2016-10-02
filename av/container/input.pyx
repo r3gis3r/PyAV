@@ -13,11 +13,12 @@ cdef class InputContainer(Container):
 
     def __cinit__(self, *args, **kwargs):
         cdef int i
+        cdef int initial_streams_nbr = self.proxy.ptr.nb_streams
         # Options dictionary, must be a list of size equal to nb_streams
-        cdef lib.AVDictionary** streams_options = <lib.AVDictionary**> lib.av_malloc(self.proxy.ptr.nb_streams * sizeof(lib.AVDictionary*))
+        cdef lib.AVDictionary** streams_options = <lib.AVDictionary**> lib.av_malloc(initial_streams_nbr * sizeof(lib.AVDictionary*))
         # Our understanding is that there is little overlap bettween
         # options for containers and each streams, so we use the same dict.
-        for i in range(self.proxy.ptr.nb_streams):
+        for i in range(initial_streams_nbr):
             streams_options[i] = NULL
             lib.av_dict_copy(&streams_options[i], self.options.ptr, 0)
         with nogil:
@@ -38,8 +39,9 @@ cdef class InputContainer(Container):
         for i in range(self.proxy.ptr.nb_streams):
             self.streams.add_stream(build_stream(self, self.proxy.ptr.streams[i], {}))
             # Clear options as not necessary anymore
-            if streams_options[i] != NULL:
-                lib.av_dict_free(&streams_options[i])
+            if i < initial_streams_nbr:
+                if streams_options[i] != NULL:
+                    lib.av_dict_free(&streams_options[i])
 
         self.metadata = avdict_to_dict(self.proxy.ptr.metadata)
 
