@@ -261,6 +261,9 @@ cdef class Container(object):
     def __repr__(self):
         return '<av.%s %r>' % (self.__class__.__name__, self.file or self.name)
 
+    def read_private_context_int64_at_offset(self, int offset):
+        return (<int64_t*>(self.proxy.ptr.priv_data + offset))[0]
+
 
 
 def open(file, mode=None, format=None, options=None):

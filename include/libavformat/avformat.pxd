@@ -148,6 +148,8 @@ cdef extern from "libavformat/avformat.pyav.h" nogil:
         
         AVInputFormat *iformat
         AVOutputFormat *oformat
+
+        void* priv_data
         
         AVIOContext *pb
         

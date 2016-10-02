@@ -96,7 +96,7 @@ cdef class Frame(object):
     def get_attributes(self):
         attributes = {
             "index": self.index,
-            "time_base": self.time_base,
+            "time_base": self._time_base,
         }
         if self.ptr:
             attributes.update({
@@ -110,7 +110,8 @@ cdef class Frame(object):
         if "index" in attributes:
             self.index = attributes["index"]
         if "time_base" in attributes:
-            self.time_base = attributes["time_base"]
+            self._time_base.num = attributes["time_base"]["num"]
+            self._time_base.den = attributes["time_base"]["den"]
         if self.ptr:
             if "pkt_pts" in attributes:
                 self.ptr.pkt_pts = attributes["pkt_pts"]
