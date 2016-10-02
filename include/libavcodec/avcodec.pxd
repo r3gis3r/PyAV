@@ -237,20 +237,12 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
     )
 
     # TODO : condition to available ffmpeg version
-    cdef int av_image_fill_arrays(
-        uint8_t **dst_data,
-        int *dst_linesize,
-        const uint8_t *src,
-        AVPixelFormat pix_fmt,
-        int width,
-        int height,
-        int align
-    )
-    cdef int av_image_get_buffer_size(
-        AVPixelFormat pix_fmt,
-        int    width,
-        int    height,
-        int    align
+    cdef int av_image_fill_pointers(
+            uint8_t **data,
+            AVPixelFormat pix_fmt,
+            int height,
+            uint8_t *ptr,
+            const int *linesizes
     )
 
     cdef struct AVPacket:

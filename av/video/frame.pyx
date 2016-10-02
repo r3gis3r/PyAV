@@ -7,8 +7,6 @@ import numpy as np
 cimport cython
 
 
-cdef int YUV420P_ALIGN = 64
-
 cdef object _cinit_bypass_sentinel
 
 cdef VideoFrame alloc_video_frame():
@@ -29,7 +27,7 @@ cdef class VideoFrame(Frame):
 
     """
 
-    def __cinit__(self, width=0, height=0, format='yuv420p'):
+    def __cinit__(self, width=0, height=0, format='yuv420p', buffer_size=0):
 
         if width is _cinit_bypass_sentinel:
             return
@@ -38,50 +36,51 @@ cdef class VideoFrame(Frame):
         if c_format < 0:
             raise ValueError('invalid format %r' % format)
 
-        self._init(c_format, width, height)
+        self._init(c_format, width, height, buffer_size)
 
-    cdef _init(self, lib.AVPixelFormat format, unsigned int width, unsigned int height):
-        cdef int buffer_size
-        cdef int align = 1
+    cdef _init(self, lib.AVPixelFormat format, unsigned int width, unsigned int height, int buffer_size):
+        cdef int requested_buffer_size = buffer_size
         with nogil:
             self.ptr.width = width
             self.ptr.height = height
             self.ptr.format = format
 
-
             if width and height:
 
                 # Cleanup the old buffer.
                 lib.av_freep(&self._buffer)
-                if format == lib.AV_PIX_FMT_YUV420P:
-                    align = YUV420P_ALIGN
                 # Get a new one.
-                buffer_size = lib.av_image_get_buffer_size(format, width, height, align)
-                # buffer_size = lib.avpicture_get_size(format, width, height)
-                with gil: err_check(buffer_size)
+                if buffer_size == 0 or format != lib.AV_PIX_FMT_YUV420P:
+                    buffer_size = lib.avpicture_get_size(format, width, height)
+                    with gil: err_check(buffer_size)
+                else:
+                    self.ptr.linesize[0] = buffer_size * 2 / (3 * height)
+                    self.ptr.linesize[1] = self.ptr.linesize[2] = buffer_size * 1 / (3 * height)
+
 
                 self._buffer = <uint8_t *>lib.av_malloc(buffer_size)
 
                 if not self._buffer:
                     with gil: raise MemoryError("cannot allocate VideoFrame buffer")
                 # Attach the AVPicture to our buffer.
-                # TODO : condition ffmpeg available version
-                # lib.avpicture_fill(
-                #         <lib.AVPicture *>self.ptr,
-                #         self._buffer,
-                #         format,
-                #         width,
-                #         height
-                # )
-                lib.av_image_fill_arrays(
-                    self.ptr.data,
-                    self.ptr.linesize,
-                    self._buffer,
-                    format,
-                    width,
-                    height,
-                    align
-                )
+                if requested_buffer_size == 0 or format != lib.AV_PIX_FMT_YUV420P:
+                    lib.avpicture_fill(
+                            <lib.AVPicture *>self.ptr,
+                            self._buffer,
+                            format,
+                            width,
+                            height
+                    )
+                else:
+                    # TODO : condition ffmpeg available version
+                    lib.av_image_fill_pointers(
+                        self.ptr.data,
+                        format,
+                        height,
+                        self._buffer,
+                        self.ptr.linesize,
+                    )
+
 
         self._init_properties()
 
@@ -201,7 +200,7 @@ cdef class VideoFrame(Frame):
 
         # Create a new VideoFrame.
         cdef VideoFrame frame = alloc_video_frame()
-        frame._init(dst_format, width, height)
+        frame._init(dst_format, width, height, 0)
 
         # Finally, scale the image.
         with nogil:
@@ -274,7 +273,7 @@ cdef class VideoFrame(Frame):
             planes = frame.planes
             out_np_array[:yuv_plane_size] = planes[0] # np.frombuffer(frame.planes[0], np.uint8)
             out_np_array[yuv_plane_size:yuv_plane_size*5/4] = planes[1] # np.frombuffer(frame.planes[1], np.uint8)
-            out_np_array[yuv_plane_size*5/4:yuv_plane_size*3/2] = planes[2] # np.frombuffer(frame.planes[2], np.uint8)
+            out_np_array[yuv_plane_size*5/4:] = planes[2] # np.frombuffer(frame.planes[2], np.uint8)
             return out_np_array
 
         if len(frame.planes) != 1:
@@ -334,7 +333,7 @@ cdef class VideoFrame(Frame):
             frame = VideoFrame(array.shape[1], array.shape[0], format)
             frame.planes[0].update(array.reshape(-1))
         elif format in ('yuv420p',):
-            frame = VideoFrame(width, height, format)
+            frame = VideoFrame(width, height, format, array.shape[0])
             yuv_plane_size = frame.ptr.linesize[0]*frame.ptr.height
             frame.planes[0].update(array[:yuv_plane_size])
             frame.planes[1].update(array[yuv_plane_size:yuv_plane_size*5/4])
