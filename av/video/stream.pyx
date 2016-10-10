@@ -17,6 +17,7 @@ cdef class VideoStream(Stream):
         self.last_h = 0
         self.encoded_frame_count = 0
         self._build_format()
+        self._reuse_decoded_frame = 0
         
     def __repr__(self):
         return '<av.%s #%d %s, %s %dx%d at 0x%x>' % (
@@ -39,6 +40,7 @@ cdef class VideoStream(Stream):
         
         # Create a frame if we don't have one ready.
         if not self.next_frame:
+            print "realloc"
             self.next_frame = alloc_video_frame()
 
         # Decode video into the frame.
@@ -65,7 +67,8 @@ cdef class VideoStream(Stream):
 
         # We are ready to send this one off into the world!
         cdef VideoFrame frame = self.next_frame
-        self.next_frame = None
+        if self._reuse_decoded_frame == 0:
+            self.next_frame = None
         
         # Tell frame to finish constructing user properties.
         frame._init_properties()
@@ -229,3 +232,7 @@ cdef class VideoStream(Stream):
         def __set__(self, value):
             self._codec_context.pix_fmt = lib.av_get_pix_fmt(value)
             self._build_format()
+
+    property reuse_decoded_frame:
+        def __set__(self, int value):
+            self._reuse_decoded_frame = value

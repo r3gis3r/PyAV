@@ -13,6 +13,8 @@ cdef class VideoStream(Stream):
 
     # Hold onto the frames that we will decode until we have a full one.
     cdef VideoFrame next_frame
+    # Should we
+    cdef int _reuse_decoded_frame
 
     # Common reformatter shared with all frames since it is likely to get reused.
     cdef VideoReformatter reformatter
