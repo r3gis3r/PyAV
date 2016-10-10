@@ -52,7 +52,10 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
         AV_CODEC_ID_NONE
         AV_CODEC_ID_MPEG2VIDEO
         AV_CODEC_ID_MPEG1VIDEO
-    
+
+    cdef enum AVFrameSideDataType:
+        AV_FRAME_DATA_A53_CC
+
     # See: http://ffmpeg.org/doxygen/trunk/structAVCodec.html
     cdef struct AVCodec:
 
@@ -186,6 +189,14 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
     cdef struct AVPicture:
         uint8_t **data
         int *linesize
+
+
+    # http://ffmpeg.org/doxygen/trunk/structAVFrameSideData.html
+    cdef struct AVFrameSideData:
+        AVFrameSideDataType type
+        uint8_t* data
+        int size
+        AVDictionary* metadata
     
     # See: http://ffmpeg.org/doxygen/trunk/structAVFrame.html
     # This is a strict superset of AVPicture.
@@ -209,10 +220,13 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
         int64_t pkt_dts
         
         int pkt_size
+
+        AVFrameSideData **side_data
+        int nb_side_data
         
         uint8_t **base
         void *opaque
-        
+
     cdef AVFrame* avcodec_alloc_frame()
     
     cdef int avpicture_alloc(
@@ -303,6 +317,7 @@ cdef extern from "libavcodec/avcodec.pyav.h" nogil:
     
     cdef void av_free_packet(AVPacket*)
     cdef void av_init_packet(AVPacket*)
+    cdef void av_new_packet(AVPacket*, int size)
     cdef void av_packet_unref(AVPacket *pkt)   
     cdef int av_copy_packet(AVPacket *dst, AVPacket *src)
     cdef int av_dup_packet(AVPacket *pkt)

@@ -2,9 +2,12 @@ from av.bytesource cimport ByteSource, bytesource
 from av.utils cimport err_check
 from av.video.format cimport get_video_format, VideoFormat
 from av.video.plane cimport VideoPlane
+from av.packet cimport Packet
 cimport numpy as np
 import numpy as np
 cimport cython
+
+from libc.string cimport strncmp, strcpy, memcpy
 
 
 cdef object _cinit_bypass_sentinel
@@ -359,3 +362,26 @@ cdef class VideoFrame(Frame):
         if self.ptr:
             if "key_frame" in attributes:
                 self.ptr.key_frame = attributes["key_frame"]
+
+    def get_subtitle_packet(self, subtitle_stream):
+        # TODO : implement
+        cdef int i
+        for i in range(self.ptr.nb_side_data):
+            if self.ptr.side_data[i].type == lib.AV_FRAME_DATA_A53_CC:
+                break
+        else:
+            return None
+
+        cdef Packet packet = Packet()
+        lib.av_new_packet(&packet.struct, self.ptr.side_data[i].size)
+# +            lavfi->sink_stream_subcc_map[sink_idx] = avctx->nb_streams;
+# +            if (!(st = avformat_new_stream(avctx, NULL)))
+# +                return AVERROR(ENOMEM);
+# +            st->codec->codec_id = AV_CODEC_ID_EIA_608;
+# +            st->codec->codec_type = AVMEDIA_TYPE_SUBTITLE;
+        memcpy(packet.struct.data, self.ptr.side_data[i].data, self.ptr.side_data[i].size)
+        packet.stream = subtitle_stream
+        packet.struct.pts = self.ptr.pts
+        # packet.struct.pos = av_frame_get_pkt_pos(self.ptr)
+
+        return packet
