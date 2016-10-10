@@ -40,7 +40,6 @@ cdef class VideoStream(Stream):
         
         # Create a frame if we don't have one ready.
         if not self.next_frame:
-            print "realloc"
             self.next_frame = alloc_video_frame()
 
         # Decode video into the frame.
