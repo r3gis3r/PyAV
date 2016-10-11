@@ -123,7 +123,7 @@ cdef class VideoStream(Stream):
         packet = Packet()
         packet.struct.data = NULL #packet data will be allocated by the encoder
         packet.struct.size = 0
-        
+
         if formated_frame:
             
             # It has a pts, so adjust it.
@@ -163,9 +163,9 @@ cdef class VideoStream(Stream):
                                                      self._codec_context.time_base,
                                                      self._stream.time_base)
                 
-            if self._codec_context.coded_frame:
-                if self._codec_context.coded_frame.key_frame:
-                    packet.struct.flags |= lib.AV_PKT_FLAG_KEY
+            # if self._codec_context.coded_frame:
+            #     if self._codec_context.coded_frame.key_frame:
+            #         packet.struct.flags |= lib.AV_PKT_FLAG_KEY
                 
             packet.struct.stream_index = self._stream.index
             packet.stream = self
