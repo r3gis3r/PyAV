@@ -19,6 +19,8 @@ cdef class AudioStream(Stream):
             self._codec_context.channel_layout = self.layout.layout
 
         self.format = get_audio_format(self._codec_context.sample_fmt)
+        self._input_time_base = lib.AVRational()
+        self._input_time_base.den = 0
     
     def __repr__(self):
         return '<av.%s #%d %s at %dHz, %s, %s at 0x%x>' % (
@@ -81,6 +83,8 @@ cdef class AudioStream(Stream):
 
         # if input_frame:
         #     print 'input_frame.ptr.pts', input_frame.ptr.pts
+        if self._input_time_base.den == 0:
+            self._input_time_base = input_frame._time_base
 
         # Resample, and re-chunk. A None frame will flush the resampler,
         # and then flush the fifo.
@@ -92,6 +96,23 @@ cdef class AudioStream(Stream):
         # Pull partial frames if we were requested to flush (via a None frame).
         cdef AudioFrame fifo_frame = self.fifo.read(self._codec_context.frame_size, partial=input_frame is None)
 
+        return self._encode_fifo_frame(fifo_frame)
+
+    cpdef encode_fifo(self):
+        """
+        Flush fifo to avoid this audio stream to get delayed audio frame in fifo
+        """
+        if not self.fifo:
+            return None
+
+        cdef AudioFrame fifo_frame = self.fifo.read(self._codec_context.frame_size, partial=False)
+
+        if fifo_frame is None:
+            return None
+
+        return self._encode_fifo_frame(fifo_frame)
+
+    cdef _encode_fifo_frame(self, AudioFrame fifo_frame):
         cdef Packet packet = Packet()
         cdef int got_packet = 0
 
@@ -102,8 +123,7 @@ cdef class AudioStream(Stream):
             if fifo_frame.ptr.pts != lib.AV_NOPTS_VALUE:
                 fifo_frame.ptr.pts = lib.av_rescale_q(
                     fifo_frame.ptr.pts, 
-                    # self.fifo.time_base,
-                    input_frame._time_base,
+                    self._input_time_base,
                     self._codec_context.time_base
                 )
             else:
