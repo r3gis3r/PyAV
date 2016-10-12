@@ -113,7 +113,8 @@ cdef class VideoStream(Stream):
                     self._codec_context.height,
                     self.format.pix_fmt,
                     lib.SWS_CS_DEFAULT,
-                    lib.SWS_CS_DEFAULT
+                    lib.SWS_CS_DEFAULT,
+                    lib.SWS_FAST_BILINEAR
                 )
 
         else:

@@ -14,8 +14,10 @@ cdef extern from "libswscale/swscale.h" nogil:
         pass
     
     # Flags.
+    cdef int SWS_FAST_BILINEAR
     cdef int SWS_BILINEAR
     cdef int SWS_BICUBIC
+    cdef int SWS_AREA
     
     cdef int SWS_CS_ITU709
     cdef int SWS_CS_FCC

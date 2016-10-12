@@ -10,6 +10,24 @@ cimport cython
 from libc.string cimport strncmp, strcpy, memcpy
 
 
+colorspace_flags = {
+    'itu709': lib.SWS_CS_ITU709,
+    'fcc': lib.SWS_CS_FCC,
+    'itu601': lib.SWS_CS_ITU601,
+    'itu624': lib.SWS_CS_SMPTE170M,
+    'smpte240': lib.SWS_CS_SMPTE240M,
+    'default': lib.SWS_CS_DEFAULT,
+    None: lib.SWS_CS_DEFAULT,
+}
+
+resize_method_flags = {
+    'fast_bilinear': lib.SWS_FAST_BILINEAR,
+    'bilinear': lib.SWS_BILINEAR,
+    'bicubic': lib.SWS_BICUBIC,
+    'area': lib.SWS_AREA,
+    None: lib.SWS_BILINEAR,
+}
+
 cdef object _cinit_bypass_sentinel
 
 cdef VideoFrame alloc_video_frame():
@@ -107,8 +125,8 @@ cdef class VideoFrame(Frame):
             id(self),
         )
 
-    def reformat(self, width=None, height=None, format=None, src_colorspace=None, dst_colorspace=None):
-        """reformat(width=None, height=None, format=None, src_colorspace=None, dst_colorspace=None)
+    def reformat(self, width=None, height=None, format=None, src_colorspace=None, dst_colorspace=None, resize_method=None):
+        """reformat(width=None, height=None, format=None, src_colorspace=None, dst_colorspace=None, resize_method=None)
 
         Create a new :class:`VideoFrame` with the given width/height/format/colorspace.
 
@@ -125,21 +143,17 @@ cdef class VideoFrame(Frame):
             - ``'itu624'``
             - ``'smpte240'``
             - ``'default'`` or ``None``
+        :param str resize_method: Desired resize method.
+        Supported resize methods are currently:
+            - ``'bicubic'``
+            - ``'bilinear_fast'``
+            - ``'bilinear'`` or ``None``
 
         """
 
         cdef VideoFormat video_format = VideoFormat(format or self.format)
 
-        colorspace_flags = {
-            'itu709': lib.SWS_CS_ITU709,
-            'fcc': lib.SWS_CS_FCC,
-            'itu601': lib.SWS_CS_ITU601,
-            'itu624': lib.SWS_CS_SMPTE170M,
-            'smpte240': lib.SWS_CS_SMPTE240M,
-            'default': lib.SWS_CS_DEFAULT,
-            None: lib.SWS_CS_DEFAULT,
-        }
-        cdef int c_src_colorspace, c_dst_colorspace
+        cdef int c_src_colorspace, c_dst_colorspace, c_resize_method
         try:
             c_src_colorspace = colorspace_flags[src_colorspace]
         except KeyError:
@@ -148,11 +162,16 @@ cdef class VideoFrame(Frame):
             c_dst_colorspace = colorspace_flags[dst_colorspace]
         except KeyError:
             raise ValueError('invalid src_colorspace %r' % dst_colorspace)
+        try:
+            c_resize_method = resize_method_flags[resize_method]
+        except KeyError:
+            raise ValueError('invalid resize_method %r' % dst_colorspace)
 
-        return self._reformat(width or self.width, height or self.height, video_format.pix_fmt, c_src_colorspace, c_dst_colorspace)
+        return self._reformat(width or self.width, height or self.height, video_format.pix_fmt, c_src_colorspace, c_dst_colorspace, c_resize_method)
 
-    cdef _reformat(self, unsigned int width, unsigned int height, lib.AVPixelFormat dst_format, int src_colorspace, int dst_colorspace):
-
+    cdef _reformat(self, unsigned int width, unsigned int height, lib.AVPixelFormat dst_format,
+                   int src_colorspace, int dst_colorspace,
+                   int resize_method):
         if self.ptr.format < 0:
             raise ValueError("invalid source format")
 
@@ -183,7 +202,7 @@ cdef class VideoFrame(Frame):
                 width,
                 height,
                 dst_format,
-                lib.SWS_BILINEAR,
+                resize_method,
                 NULL,
                 NULL,
                 NULL
@@ -193,13 +212,14 @@ cdef class VideoFrame(Frame):
         cdef int srcRange, dstRange, brightness, contrast, saturation
         cdef int ret
         with nogil:
-            ret = lib.sws_getColorspaceDetails(self.reformatter.ptr, &inv_tbl, &srcRange, &tbl, &dstRange, &brightness, &contrast, &saturation)
-            if not ret < 0:
-                if src_colorspace != lib.SWS_CS_DEFAULT:
-                    inv_tbl = lib.sws_getCoefficients(src_colorspace)
-                if dst_colorspace != lib.SWS_CS_DEFAULT:
-                    tbl = lib.sws_getCoefficients(dst_colorspace)
-                lib.sws_setColorspaceDetails(self.reformatter.ptr, inv_tbl, srcRange, tbl, dstRange, brightness, contrast, saturation)
+            if src_colorspace != lib.SWS_CS_DEFAULT or dst_colorspace != lib.SWS_CS_DEFAULT:
+                ret = lib.sws_getColorspaceDetails(self.reformatter.ptr, &inv_tbl, &srcRange, &tbl, &dstRange, &brightness, &contrast, &saturation)
+                if not ret < 0:
+                    if src_colorspace != lib.SWS_CS_DEFAULT:
+                        inv_tbl = lib.sws_getCoefficients(src_colorspace)
+                    if dst_colorspace != lib.SWS_CS_DEFAULT:
+                        tbl = lib.sws_getCoefficients(dst_colorspace)
+                    lib.sws_setColorspaceDetails(self.reformatter.ptr, inv_tbl, srcRange, tbl, dstRange, brightness, contrast, saturation)
 
         # Create a new VideoFrame.
         cdef VideoFrame frame = alloc_video_frame()
