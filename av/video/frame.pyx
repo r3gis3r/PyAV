@@ -3,12 +3,17 @@ from av.utils cimport err_check
 from av.video.format cimport get_video_format, VideoFormat
 from av.video.plane cimport VideoPlane
 from av.packet cimport Packet
-cimport numpy as np
 import numpy as np
+cimport numpy as np
 cimport cython
 
 from libc.string cimport strncmp, strcpy, memcpy
 
+from numpy cimport PyArray_EMPTY, PyArray_DIMS, import_array, NPY_UINT8
+
+import_array()
+
+ctypedef np.uint8_t DTYPE_UINT8_T
 
 colorspace_flags = {
     'itu709': lib.SWS_CS_ITU709,
@@ -61,6 +66,7 @@ cdef class VideoFrame(Frame):
 
     cdef _init(self, lib.AVPixelFormat format, unsigned int width, unsigned int height, int buffer_size):
         cdef int requested_buffer_size = buffer_size
+        cdef int uv_live_size
         with nogil:
             self.ptr.width = width
             self.ptr.height = height
@@ -75,8 +81,10 @@ cdef class VideoFrame(Frame):
                     buffer_size = lib.avpicture_get_size(format, width, height)
                     with gil: err_check(buffer_size)
                 else:
-                    self.ptr.linesize[0] = buffer_size * 2 / (3 * height)
-                    self.ptr.linesize[1] = self.ptr.linesize[2] = buffer_size * 1 / (3 * height)
+                    with cython.cdivision(True):
+                        uv_live_size = buffer_size * 1 / (3 * height)
+                    self.ptr.linesize[0] = uv_live_size * 2
+                    self.ptr.linesize[1] = self.ptr.linesize[2] = uv_live_size
 
 
                 self._buffer = <uint8_t *>lib.av_malloc(buffer_size)
@@ -283,20 +291,23 @@ cdef class VideoFrame(Frame):
         Any ``**kwargs`` are passed to :meth:`VideoFrame.reformat`.
 
         """
-        cdef np.ndarray[np.uint8_t, ndim=1] out_np_array
+        cdef np.ndarray[DTYPE_UINT8_T, ndim=1] out_np_array
         cdef int yuv_plane_size
         cdef VideoFrame frame = self.reformat(**kwargs)
+        cdef np.npy_intp *dims = [0]
+
         # TODO: Make this more general (if we can)
         if frame.ptr.format in (lib.AV_PIX_FMT_YUV420P,):
             # Pseudo flat format for yuv, useful for serialization/deserialization made faster
             yuv_plane_size = frame.ptr.linesize[0] * frame.ptr.height
-            buffer_size = yuv_plane_size * 3 / 2
-            out_np_array = np.empty((buffer_size,), dtype=np.uint8)
-            # out_np_array[:yuv_plane_size] = np.frombuffer(frame.planes[0], np.uint8)
-            planes = frame.planes
-            out_np_array[:yuv_plane_size] = planes[0] # np.frombuffer(frame.planes[0], np.uint8)
-            out_np_array[yuv_plane_size:yuv_plane_size*5/4] = planes[1] # np.frombuffer(frame.planes[1], np.uint8)
-            out_np_array[yuv_plane_size*5/4:] = planes[2] # np.frombuffer(frame.planes[2], np.uint8)
+            with cython.cdivision(True):
+                buffer_size = yuv_plane_size * 3 / 2
+            dims[0] = buffer_size
+            out_np_array = PyArray_EMPTY(1, dims, NPY_UINT8, 0)
+            with nogil:
+                memcpy(<uint8_t*>out_np_array.data, <uint8_t*>self.ptr.extended_data[0], yuv_plane_size)
+                memcpy((<uint8_t*>out_np_array.data) + yuv_plane_size, <uint8_t*>self.ptr.extended_data[1], yuv_plane_size / 4)
+                memcpy((<uint8_t*>out_np_array.data) + yuv_plane_size * 5/4, <uint8_t*>self.ptr.extended_data[2], yuv_plane_size / 4)
             return out_np_array
 
         if len(frame.planes) != 1:
@@ -305,8 +316,7 @@ cdef class VideoFrame(Frame):
         # We only suppose this convenience for a few types.
         if frame.ptr.format in (lib.AV_PIX_FMT_RGB24, lib.AV_PIX_FMT_BGR24):
             return np.frombuffer(frame.planes[0], np.uint8).reshape(frame.ptr.height, frame.ptr.width, -1)
-        # TODO : express this a more performant way
-        if frame.format.name in ('gray16le', 'gray16be'):
+        if frame.ptr.format in (lib.AV_PIX_FMT_GRAY16BE, lib.AV_PIX_FMT_GRAY16LE):
             return np.frombuffer(frame.planes[0], np.dtype('<u2')).reshape(frame.height, frame.width)
 
         else:
@@ -348,19 +358,29 @@ cdef class VideoFrame(Frame):
         # TODO: We could stand to be more accepting.
         assert array.dtype == 'uint8'
 
-        cdef int yuv420_size
+        cdef np.ndarray nparray = array
+        cdef uint8_t* data = <uint8_t*> nparray.data
+        cdef int array_size, yuv_plane_size
+        cdef int c_width, c_height
 
-        if format in ('rgb24', 'bgr24', 'gray16le', 'gray16be'):
-            assert array.ndim == 3
-            assert array.shape[2] == 3
-            frame = VideoFrame(array.shape[1], array.shape[0], format)
-            frame.planes[0].update(array.reshape(-1))
-        elif format in ('yuv420p',):
-            frame = VideoFrame(width, height, format, array.shape[0])
+        cdef lib.AVPixelFormat c_format = lib.av_get_pix_fmt(format)
+        cdef VideoFrame frame = alloc_video_frame()
+
+        if c_format in (lib.AV_PIX_FMT_BGR24, lib.AV_PIX_FMT_RGB24, lib.AV_PIX_FMT_GRAY16LE, lib.AV_PIX_FMT_GRAY16BE):
+            assert nparray.ndim == 3
+            assert nparray.shape[2] == 3
+            array_size = nparray.shape[0] * nparray.shape[1] * nparray.shape[2]
+            frame._init(c_format, nparray.shape[1], nparray.shape[0], array_size)
+            memcpy(<uint8_t*>frame.ptr.extended_data[0], <uint8_t*>data, array_size)
+            # frame.planes[0].update(array.reshape(-1))
+        elif c_format in (lib.AV_PIX_FMT_YUV420P,):
+            c_width = width
+            c_height = height
+            frame._init(c_format, c_width, c_height, nparray.shape[0])
             yuv_plane_size = frame.ptr.linesize[0]*frame.ptr.height
-            frame.planes[0].update(array[:yuv_plane_size])
-            frame.planes[1].update(array[yuv_plane_size:yuv_plane_size*5/4])
-            frame.planes[2].update(array[yuv_plane_size*5/4:yuv_plane_size*3/2])
+            memcpy(<uint8_t*>frame.ptr.extended_data[0], <uint8_t*>data, yuv_plane_size)
+            memcpy(<uint8_t*>frame.ptr.extended_data[1], <uint8_t*>data + yuv_plane_size, yuv_plane_size / 4)
+            memcpy(<uint8_t*>frame.ptr.extended_data[2], <uint8_t*>data + yuv_plane_size * 5/4, yuv_plane_size / 4)
         else:
             raise ValueError("Cannot conveniently get from numpy array with %s format" % format)
         if kwargs:
