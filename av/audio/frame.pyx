@@ -2,6 +2,10 @@ from av.audio.format cimport get_audio_format
 from av.audio.layout cimport get_audio_layout
 from av.audio.plane cimport AudioPlane
 from av.utils cimport err_check
+cimport numpy as np
+cimport cython
+
+from libc.string cimport strncmp, strcpy, memcpy
 
 AV_TO_NUMPY_TYPE = {
     "u8": "uint",
@@ -162,6 +166,7 @@ cdef class AudioFrame(Frame):
         cdef lib.AVSampleFormat format = <lib.AVSampleFormat>NUMPY_TO_AV_TYPE[array.dtype.name]
         cdef int samples = array.shape[0]
         cdef int channels = array.shape[1]
+        cdef np.ndarray nparray = array.reshape(-1)
 
         frame._init(
             format,
@@ -169,7 +174,7 @@ cdef class AudioFrame(Frame):
             samples,
             1, # Align?
         )
-        frame.planes[0].update(array.reshape(-1))
+        memcpy(<uint8_t*>frame.ptr.extended_data[0], <uint8_t*>nparray.data, nparray.shape[0] * nparray.dtype.itemsize)
         if kwargs:
             frame.set_attributes(kwargs)
 

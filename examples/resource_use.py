@@ -13,6 +13,7 @@ parser.add_argument('-f', '--frames', type=int, default=100)
 parser.add_argument('--print', dest='print_', action='store_true')
 parser.add_argument('--to-rgb', action='store_true')
 parser.add_argument('--to-image', action='store_true')
+parser.add_argument('--to-nd-array', action='store_true')
 parser.add_argument('--gc', '-g', action='store_true')
 parser.add_argument('input')
 args = parser.parse_args()
@@ -47,6 +48,8 @@ for round_ in xrange(args.count):
                 print frame.to_rgb()
             if args.to_image:
                 print frame.to_image()
+            if args.to_nd_array:
+                print frame.to_nd_array()
             fi += 1
         if fi > args.frames:
             break
