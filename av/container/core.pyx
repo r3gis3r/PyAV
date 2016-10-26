@@ -1,3 +1,5 @@
+from io import UnsupportedOperation
+
 from libc.stdint cimport uint8_t, int64_t
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy
@@ -81,7 +83,8 @@ cdef int64_t pyio_seek_gil(void *opaque, int64_t offset, int whence):
             else:
                 res = self.ftell()
         return res
-
+    except UnsupportedOperation:
+        return -1
     except Exception as e:
         return stash_exception()
 
